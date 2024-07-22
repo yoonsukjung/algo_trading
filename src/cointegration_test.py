@@ -8,7 +8,7 @@ from statsmodels.tsa.stattools import coint
 
 # Parameters
 data_dir = '/Users/yoonsukjung/PycharmProjects/Trading/data/15m_2024-07-12'
-output_file_path = '/Users/yoonsukjung/PycharmProjects/algo_trading/results/coint_pairs.csv'
+output_dir = '/Users/yoonsukjung/PycharmProjects/algo_trading/15m_results'
 start_date = '2023-01-01T00:00:00Z'
 end_date = '2024-01-01T00:00:00Z'
 
@@ -95,21 +95,18 @@ for category_name in categories_binance.columns:
 
     close_normal = close[symbols_list_normal]
 
-    # Calculate p-values and cointegrated pairs
+    # Calculate p-values and find cointegrated pairs
     pvalues, pairs = find_cointegrated_pairs(close_normal)
 
-    # Calculate HR, correlation, spread mean, and spread std for pairs
+    # Calculate HR and correlation
     results_pairs = calculate_HR(close_normal, pairs)
     results_pairs['categories'] = category_name
 
-    # Append results to the final DataFrame
-    all_results = pd.concat([all_results, results_pairs], ignore_index=True)
+    # Create directory for category if it doesn't exist
+    category_output_dir = os.path.join(output_dir, category_name)
+    os.makedirs(category_output_dir, exist_ok=True)
 
-# Load existing data if available and append
-if os.path.isfile(output_file_path):
-    existing_data = pd.read_csv(output_file_path)
-    all_results = pd.concat([existing_data, all_results], ignore_index=True)
-
-# Save to CSV
-all_results.to_csv(output_file_path, index=False)
-print(all_results)
+    # Save results to CSV
+    output_file_path = os.path.join(category_output_dir, f"coint_pairs.csv")
+    results_pairs.to_csv(output_file_path, index=False)
+    print(f"Results saved for category {category_name} in {output_file_path}")

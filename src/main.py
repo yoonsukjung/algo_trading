@@ -8,9 +8,10 @@ from utils import setup_logging
 logger = setup_logging()
 
 # 사용자가 쉽게 수정할 수 있는 경로 변수 설정
-BASE_PATH = "/Users/jeonhyeon/Desktop/trading/15m_2407"
-RESULT_PATH = "/Users/jeonhyeon/Desktop/trading/15m_2407_pairs/defi"
-COINT_FILE_PATH = os.path.join(RESULT_PATH, "coint_defi.csv")
+BASE_PATH = '/Users/yoonsukjung/PycharmProjects/Trading/data/15m_2024-07-12'
+RESULT_PATH = '/Users/yoonsukjung/PycharmProjects/algo_trading/15m_results'
+TARGET_CATEGORY = os.path.join(RESULT_PATH, "defi")
+COINT_FILE_PATH = os.path.join(TARGET_CATEGORY, "coint_pairs.csv")
 
 def run_backtest_for_row(row_index, base_path, result_path, coint_file_path):
     try:
@@ -53,4 +54,4 @@ def run_backtest_for_all_rows(base_path, result_path, coint_file_path):
         logger.error(f"Error in running backtest for all rows: {e}")
 
 if __name__ == "__main__":
-    run_backtest_for_all_rows(BASE_PATH, RESULT_PATH, COINT_FILE_PATH)
+    run_backtest_for_all_rows(BASE_PATH, TARGET_CATEGORY, COINT_FILE_PATH)
