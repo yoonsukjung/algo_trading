@@ -41,16 +41,13 @@ python src/main.py
 ## Modules Description
 
 ### Backtester
-- `backtester.py`: Provides backtesting functionality for the trading strategy.
+- `backtester.py`: Provides backtesting functionality for the trading strategy. Saves and manages the trading results.
 
 ### Data Loader
 - `data_loader.py`: Loads the required data for the trading strategy.
 
 ### Main
 - `main.py`: Main script to run the trading system.
-
-### Result Handler
-- `result_handler.py`: Saves and manages the trading results.
 
 ### Strategy
 - `strategy.py`: Defines the core trading strategy.
