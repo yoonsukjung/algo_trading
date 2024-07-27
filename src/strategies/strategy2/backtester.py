@@ -266,14 +266,13 @@ class Backtester:
             result_file_path = os.path.join(crypto_pair_folder, f"{self.strategy.crypto1}_{self.strategy.crypto2}.csv")
             if not os.path.exists(result_file_path):
                 columns = ['crypto1', 'crypto2', 'entry_z', 'exit_z', 'stop_z', 'total_ret', 'ann_ret',
-                           'ann_vol', 'sharpe', 'max_dd', 'win_rate', 'avg_trade_ret', 'num_trades', 'rolling_window']
+                           'ann_vol', 'sharpe', 'max_dd', 'win_rate', 'avg_trade_ret', 'num_trades']
                 df = pd.DataFrame(columns=columns)
                 df.to_csv(result_file_path, index=False)
                 logger.info(f"Created new file: {result_file_path}")
             else:
                 df = pd.read_csv(result_file_path)
 
-            n_sma = self.strategy.calculate_rolling_window(self.strategy.calculate_theta())
 
             new_row = {
                 'crypto1': self.strategy.crypto1,
@@ -289,7 +288,6 @@ class Backtester:
                 'win_rate': self.performance_metrics.get('win_rate', 0),
                 'avg_trade_ret': self.performance_metrics.get('average_profit_per_trade', 0),
                 'num_trades': self.performance_metrics.get('num_trades', 0),
-                'rolling_window': n_sma
             }
 
             df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)

@@ -1,12 +1,11 @@
 import os
 import pandas as pd
-from ..utils import data_loader
 from strategy import CointegrationStrategy
 from backtester import Backtester
-from ..utils import utils
+from src.strategies.utils import logger
 from config import data_path, result_path_strategy1
 
-logger = utils.setup_logging()
+logger = logger.setup_logging()
 
 # 사용자가 쉽게 수정할 수 있는 경로 변수 설정
 

@@ -89,18 +89,20 @@ class CointegrationStrategy(Strategy):
 
         for index in self.signals.index:
             self.update_indicators(index, exit_position, stop_loss)
+            if self.position == 0:
+                if not self.indicators.loc[index, 'stop_loss']:
+                    self.check_for_entry(index, entry_short, entry_long, stop_loss)
+                else:
+                    continue
 
-            if self.indicators.loc[index, 'stop_loss']:
-                continue
-            elif self.position == 0 and not self.indicators.loc[index, 'stop_loss']:
-                self.check_for_entry(index, entry_short, entry_long, stop_loss)
             else:
                 self.check_for_exit(index, exit_position, stop_loss)
 
 
 
-        self.signals['position'] = self.signals['trade'].ffill().shift().fillna(0).replace(
+        result = self.signals['trade'].ffill().shift().fillna(0).replace(
             {'long': 1, 'short': -1, 'close': 0})
+        self.signals['position'] = result.infer_objects(copy=False)
 
     def update_indicators(self, index, exit_position, stop_loss):
         if stop_loss.loc[index]:

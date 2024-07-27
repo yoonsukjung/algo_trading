@@ -30,7 +30,7 @@ class Strategy:
             logger.info(f"Closed position at index {index}")
 
 class CointegrationStrategy(Strategy):
-    def __init__(self, data, slope, crypto1, crypto2, entry_z_score=1.5, exit_z_score=0.5, stop_z_score=5, fee=0.001, slippage=0.001):
+    def __init__(self, data, slope, crypto1, crypto2, spread_mean, spread_std, entry_z_score=1.2, exit_z_score=0.2, stop_z_score=3, fee=0.001, slippage=0.001):
         super().__init__(data)
         self.data1 = data['asset1'].copy()
         self.data2 = data['asset2'].copy()
@@ -42,15 +42,16 @@ class CointegrationStrategy(Strategy):
         self.stop_z_score = stop_z_score
         self.fee = fee
         self.slippage = slippage
+        self.spread_mean = spread_mean
+        self.spread_std = spread_std
 
 
     def calculate_z_score(self):
         logger.info("Calculating z-score")
         spread = np.log(self.data1['close']) - self.slope * np.log(self.data2['close'])
-        rolling_mean = spread.rolling(window=n_sma).mean()
-        rolling_std = spread.rolling(window=n_sma).std()
 
-        self.data1['z_score'] = (spread - rolling_mean) / rolling_std
+
+        self.data1['z_score'] = (spread - self.spread_mean) / self.spread_std
         self.signals['z_score'] = self.data1['z_score']
 
         logger.info(f"Sample z_score values: {self.data1['z_score'].head()}")
@@ -69,18 +70,21 @@ class CointegrationStrategy(Strategy):
 
         for index in self.signals.index:
             self.update_indicators(index, exit_position, stop_loss)
+            if self.position == 0:
+                if not self.indicators.loc[index, 'stop_loss']:
+                    self.check_for_entry(index, entry_short, entry_long, stop_loss)
+                else:
+                    continue
 
-            if self.indicators.loc[index, 'stop_loss']:
-                continue
-            elif self.position == 0 and not self.indicators.loc[index, 'stop_loss']:
-                self.check_for_entry(index, entry_short, entry_long, stop_loss)
             else:
                 self.check_for_exit(index, exit_position, stop_loss)
 
 
 
-        self.signals['position'] = self.signals['trade'].ffill().shift().fillna(0).replace(
+        result = self.signals['trade'].ffill().shift().fillna(0).replace(
             {'long': 1, 'short': -1, 'close': 0})
+        self.signals['position'] = result.infer_objects(copy=False)
+
 
     def update_indicators(self, index, exit_position, stop_loss):
         if stop_loss.loc[index]:
