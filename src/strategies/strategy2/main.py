@@ -55,8 +55,19 @@ def run_backtest_for_all_rows(base_path, result_path, coint_file_path):
     except Exception as e:
         logger.error(f"Error in running backtest for all rows: {e}")
 
-if __name__ == "__main__":
-    run_backtest_for_all_rows(data_path, category_path, coint_file_path)
+# if __name__ == "__main__":
+#     run_backtest_for_all_rows(data_path, category_path, coint_file_path)
 
 # if __name__ == "__main__":
 #     run_backtest_for_row(9, data_path, category_path, coint_file_path)
+
+# 접근하고자 하는 디렉토리 경로
+directory = result_path_strategy2
+
+# 디렉토리 내의 모든 항목에 대해 반복
+if __name__ == "__main__":
+    for item in os.listdir(directory):
+        item_path = os.path.join(directory, item)
+        item_coint_path = os.path.join(item_path, "coint_pairs.csv")
+        if os.path.isdir(item_path):
+            run_backtest_for_all_rows(data_path, item_path, item_coint_path)
