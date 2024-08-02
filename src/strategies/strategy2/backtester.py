@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 
 logger = logging.getLogger(__name__)
 class Backtester:
-    def __init__(self, strategy, start_date=None, end_date=None, fee=0.001, slippage=0.001, result_path=None):
+    def __init__(self, strategy, start_date=None, end_date=None, fee=0.001, slippage=0.001, result_path=None, category_name=None):
         self.strategy = strategy
         self.start_date = start_date
         self.end_date = end_date
@@ -17,6 +17,7 @@ class Backtester:
         self.result_path = result_path
         self.trade_log = []
         self.performance_metrics = {}
+        self.category_name = category_name
 
     def run_backtest(self):
         logger.info("Running backtest")
@@ -275,6 +276,7 @@ class Backtester:
 
 
             new_row = {
+                'category': self.category_name,
                 'crypto1': self.strategy.crypto1,
                 'crypto2': self.strategy.crypto2,
                 'entry_z': self.strategy.entry_z_score,
@@ -287,7 +289,7 @@ class Backtester:
                 'max_dd': self.performance_metrics.get('max_drawdown', 0),
                 'win_rate': self.performance_metrics.get('win_rate', 0),
                 'avg_trade_ret': self.performance_metrics.get('average_profit_per_trade', 0),
-                'num_trades': self.performance_metrics.get('num_trades', 0),
+                'num_trades': self.performance_metrics.get('num_trades', 0)
             }
 
             df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)

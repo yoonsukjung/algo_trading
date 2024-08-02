@@ -8,11 +8,11 @@ from config import data_path, result_path_strategy2
 logger = logger.setup_logging()
 
 # 사용자가 쉽게 수정할 수 있는 경로 변수 설정
-
-category_path = os.path.join(result_path_strategy2, "Metaverse")
+category_name = "Metaverse"
+category_path = os.path.join(result_path_strategy2, category_name)
 coint_file_path = os.path.join(category_path, "coint_pairs.csv")
 
-def run_backtest_for_row(row_index, base_path, result_path, coint_file_path):
+def run_backtest_for_row(row_index, base_path, result_path, coint_file_path, category_name):
     try:
         file1 = pd.read_csv(coint_file_path)
         row = file1.iloc[row_index]
@@ -40,18 +40,18 @@ def run_backtest_for_row(row_index, base_path, result_path, coint_file_path):
 
         strategy = CointegrationStrategy(data, slope, crypto1, crypto2, spread_mean, spread_std)
         strategy.categories = categories
-        backtester = Backtester(strategy, start_date=start_date, end_date=end_date, fee=0.001, slippage=0.001, result_path=result_path)
+        backtester = Backtester(strategy, start_date=start_date, end_date=end_date, fee=0.001, slippage=0.001, result_path=result_path, category_name = category_name)
         backtester.run_backtest()
     except Exception as e:
         logger.error(f"Error in the main execution: {e}")
 
-def run_backtest_for_all_rows(base_path, result_path, coint_file_path):
+def run_backtest_for_all_rows(base_path, result_path, coint_file_path, category_name):
     try:
         file1 = pd.read_csv(coint_file_path)
         num_rows = len(file1)
 
         for row_index in range(num_rows):
-            run_backtest_for_row(row_index, base_path, result_path, coint_file_path)
+            run_backtest_for_row(row_index, base_path, result_path, coint_file_path, category_name)
     except Exception as e:
         logger.error(f"Error in running backtest for all rows: {e}")
 
@@ -70,4 +70,4 @@ if __name__ == "__main__":
         item_path = os.path.join(directory, item)
         item_coint_path = os.path.join(item_path, "coint_pairs.csv")
         if os.path.isdir(item_path):
-            run_backtest_for_all_rows(data_path, item_path, item_coint_path)
+            run_backtest_for_all_rows(data_path, item_path, item_coint_path, category_name)
