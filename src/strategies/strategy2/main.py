@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from strategy import CointegrationStrategy
 from backtester import Backtester
 from src.strategies.utils import logger
@@ -12,7 +13,7 @@ category_name = "Metaverse"
 category_path = os.path.join(result_path_strategy2, category_name)
 coint_file_path = os.path.join(category_path, "coint_pairs.csv")
 
-def run_backtest_for_row(row_index, base_path, result_path, coint_file_path, category_name):
+def run_backtest_for_row(row_index, base_path, result_path, coint_file_path, category_name, entry_z_score, exit_z_score, stop_z_score):
     try:
         file1 = pd.read_csv(coint_file_path)
         row = file1.iloc[row_index]
@@ -22,7 +23,6 @@ def run_backtest_for_row(row_index, base_path, result_path, coint_file_path, cat
         categories = row['categories']
         spread_mean = row['spread_mean']
         spread_std = row['spread_std']
-
 
         data1_path = os.path.join(base_path, f"{crypto1}_USDT_15m.csv")
         data2_path = os.path.join(base_path, f"{crypto2}_USDT_15m.csv")
@@ -38,36 +38,37 @@ def run_backtest_for_row(row_index, base_path, result_path, coint_file_path, cat
         start_date = '2024-01-01'
         end_date = '2024-06-30'
 
-        strategy = CointegrationStrategy(data, slope, crypto1, crypto2, spread_mean, spread_std)
+        strategy = CointegrationStrategy(data, slope, crypto1, crypto2, spread_mean, spread_std, entry_z_score, exit_z_score, stop_z_score)
         strategy.categories = categories
-        backtester = Backtester(strategy, start_date=start_date, end_date=end_date, fee=0.001, slippage=0.001, result_path=result_path, category_name = category_name)
+        backtester = Backtester(strategy, start_date=start_date, end_date=end_date, fee=0.001, slippage=0.001, result_path=result_path, category_name=category_name)
         backtester.run_backtest()
     except Exception as e:
         logger.error(f"Error in the main execution: {e}")
 
-def run_backtest_for_all_rows(base_path, result_path, coint_file_path, category_name):
-    try:
-        file1 = pd.read_csv(coint_file_path)
-        num_rows = len(file1)
-
-        for row_index in range(num_rows):
-            run_backtest_for_row(row_index, base_path, result_path, coint_file_path, category_name)
-    except Exception as e:
-        logger.error(f"Error in running backtest for all rows: {e}")
-
-# if __name__ == "__main__":
-#     run_backtest_for_all_rows(data_path, category_path, coint_file_path)
-
-# if __name__ == "__main__":
-#     run_backtest_for_row(9, data_path, category_path, coint_file_path)
-
-# 접근하고자 하는 디렉토리 경로
-directory = result_path_strategy2
-
-# 디렉토리 내의 모든 항목에 대해 반복
 if __name__ == "__main__":
-    for item in os.listdir(directory):
-        item_path = os.path.join(directory, item)
-        item_coint_path = os.path.join(item_path, "coint_pairs.csv")
-        if os.path.isdir(item_path):
-            run_backtest_for_all_rows(data_path, item_path, item_coint_path, category_name)
+    exit_z_scores = [0, 0.1, 0.2, 0.3, 0.4, 0.5]
+    entry_z_scores = [1.0, 1.2, 1.4, 1.6, 1.8, 2.0]
+    stop_z_scores = [2.5, 3.0, 3.5, 4.0]
+
+    tasks = []
+    with ProcessPoolExecutor() as executor:
+        for exit_z_score in exit_z_scores:
+            for entry_z_score in entry_z_scores:
+                for stop_z_score in stop_z_scores:
+                    logger.info(f"Running backtest with entry_z_score={entry_z_score}, exit_z_score={exit_z_score}, stop_z_score={stop_z_score}")
+                    for item in os.listdir(result_path_strategy2):
+                        item_path = os.path.join(result_path_strategy2, item)
+                        item_coint_path = os.path.join(item_path, "coint_pairs.csv")
+                        if os.path.isdir(item_path):
+                            try:
+                                file1 = pd.read_csv(item_coint_path)
+                                num_rows = len(file1)
+                                for row_index in range(num_rows):
+                                    tasks.append(executor.submit(run_backtest_for_row, row_index, data_path, item_path, item_coint_path, category_name, entry_z_score, exit_z_score, stop_z_score))
+                            except Exception as e:
+                                logger.error(f"Error in running backtest for item: {item}, error: {e}")
+        for future in as_completed(tasks):
+            try:
+                future.result()
+            except Exception as e:
+                logger.error(f"Error in future result: {e}")
