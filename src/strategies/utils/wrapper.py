@@ -2,10 +2,10 @@
 import glob
 import os
 import pandas as pd
-from config import result_path_strategy2
+from config import result_path_strategy1
 
 
-start_directory = result_path_strategy2
+start_directory = result_path_strategy1
 
 csv_files = glob.glob(os.path.join(start_directory, "*", "*", "*.csv"))
 

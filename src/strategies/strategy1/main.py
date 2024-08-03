@@ -9,8 +9,6 @@ logger = logger.setup_logging()
 
 # 사용자가 쉽게 수정할 수 있는 경로 변수 설정
 
-category_path = os.path.join(result_path_strategy1, "Layer1_Layer2")
-coint_file_path = os.path.join(category_path, "coint_pairs.csv")
 
 def run_backtest_for_row(row_index, base_path, result_path, coint_file_path):
     try:
@@ -52,5 +50,16 @@ def run_backtest_for_all_rows(base_path, result_path, coint_file_path):
     except Exception as e:
         logger.error(f"Error in running backtest for all rows: {e}")
 
+# if __name__ == "__main__":
+#     run_backtest_for_all_rows(data_path, category_path, coint_file_path)
+
+# 접근하고자 하는 디렉토리 경로
+directory = result_path_strategy1
+
+# 디렉토리 내의 모든 항목에 대해 반복
 if __name__ == "__main__":
-    run_backtest_for_all_rows(data_path, category_path, coint_file_path)
+    for item in os.listdir(directory):
+        item_path = os.path.join(directory, item)
+        item_coint_path = os.path.join(item_path, "coint_pairs.csv")
+        if os.path.isdir(item_path):
+            run_backtest_for_all_rows(data_path, item_path, item_coint_path)
