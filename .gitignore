@@ -1,8 +1,4 @@
 # 모든 파일과 디렉토리를 무시
 *
 
-# src 디렉토리는 무시하지 않음
-!/src
-
-# src 디렉토리 내의 모든 내용을 추적
-!/src/**
+!/src/strategies/utils/plotting_z_scores.py

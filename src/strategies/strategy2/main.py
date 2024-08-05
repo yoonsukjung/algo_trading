@@ -51,7 +51,7 @@ if __name__ == "__main__":
     stop_z_scores = [2.5, 3.0, 3.5, 4.0]
 
     tasks = []
-    with ProcessPoolExecutor() as executor:
+    with ProcessPoolExecutor(max_workers = 4) as executor:
         for exit_z_score in exit_z_scores:
             for entry_z_score in entry_z_scores:
                 for stop_z_score in stop_z_scores:

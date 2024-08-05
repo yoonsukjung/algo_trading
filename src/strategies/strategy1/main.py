@@ -70,44 +70,52 @@ def run_backtest_for_all_rows(base_path, result_path, coint_file_path, entry_z_s
         logger.error(f"Error in running backtest for all rows: {e}")
         return []
 
+
 def plot_combined_performance(results, result_path):
     try:
-        fig, ax1 = plt.subplots(figsize=(14, 10))
+        metrics = ['entry_z_score', 'exit_z_score', 'stop_z_score']
 
-        # Extract metrics
-        entry_z_scores = [result['entry_z_score'] for result in results]
-        exit_z_scores = [result['exit_z_score'] for result in results]
-        stop_z_scores = [result['stop_z_score'] for result in results]
-        total_returns = [result['total_return'] for result in results]
-        annualized_volatility = [result['annualized_volatility'] for result in results]
-        sharpe_ratios = [result['sharpe_ratio'] for result in results]
+        fig, axs = plt.subplots(3, 1, figsize=(14, 30))
+        fig.suptitle('Performance Metrics for Different Z-Scores', fontsize=16)
 
-        # Plot total returns
-        color = 'tab:blue'
-        ax1.set_xlabel('Parameter Combinations')
-        ax1.set_ylabel('Total Returns', color=color)
-        ax1.plot(range(len(results)), total_returns, 'o', label='Total Returns', color=color)
-        ax1.tick_params(axis='y', labelcolor=color)
+        for idx, metric in enumerate(metrics):
+            ax1 = axs[idx]
 
-        # Instantiate a second y-axis to plot volatility and sharpe ratio
-        ax2 = ax1.twinx()
-        color = 'tab:red'
-        ax2.set_ylabel('Volatility & Sharpe Ratio', color=color)
-        ax2.plot(range(len(results)), annualized_volatility, 'x', label='Volatility', color='tab:orange')
-        ax2.plot(range(len(results)), sharpe_ratios, '^', label='Sharpe Ratio', color='tab:green')
-        ax2.tick_params(axis='y', labelcolor=color)
+            # Extract metrics
+            x_values = [result[metric] for result in results]
+            total_returns = [result['total_return'] for result in results]
+            annualized_volatility = [result['annualized_volatility'] for result in results]
+            sharpe_ratios = [result['sharpe_ratio'] for result in results]
 
-        # Title and legends
-        plt.title('Performance Metrics for Different Parameter Combinations')
-        fig.tight_layout()
-        fig.legend(loc='upper left', bbox_to_anchor=(0.1,0.9))
+            # Plot total returns
+            color = 'tab:blue'
+            ax1.set_xlabel(f'{metric.replace("_", " ").title()}')
+            ax1.set_ylabel('Total Returns', color=color)
+            ax1.scatter(x_values, total_returns, label='Total Returns', color=color)
+            ax1.tick_params(axis='y', labelcolor=color)
 
-        # Save the plot as an image file in the result_path
+            # Instantiate a second y-axis to plot volatility and sharpe ratio
+            ax2 = ax1.twinx()
+            color = 'tab:red'
+            ax2.set_ylabel('Volatility & Sharpe Ratio', color=color)
+            ax2.scatter(x_values, annualized_volatility, marker='x', label='Volatility', color='tab:orange')
+            ax2.scatter(x_values, sharpe_ratios, marker='^', label='Sharpe Ratio', color='tab:green')
+            ax2.tick_params(axis='y', labelcolor=color)
+
+            # Title and legends
+            ax1.set_title(f'Performance Metrics vs {metric.replace("_", " ").title()}')
+            lines1, labels1 = ax1.get_legend_handles_labels()
+            lines2, labels2 = ax2.get_legend_handles_labels()
+            ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper left', bbox_to_anchor=(0.1, 1.1))
+
+        # Adjust layout and save the plot
+        plt.tight_layout()
         png_folder = os.path.join(result_path, 'combined_png')
         os.makedirs(png_folder, exist_ok=True)
-        image_filename = os.path.join(png_folder, 'combined_performance.png')
-        plt.savefig(image_filename)
+        image_filename = os.path.join(png_folder, 'combined_performance_all_zscores.png')
+        plt.savefig(image_filename, dpi=300, bbox_inches='tight')
         plt.close()
+
     except Exception as e:
         logger.error(f"Error in plotting combined performance: {e}")
 
@@ -118,12 +126,18 @@ if __name__ == "__main__":
 
     all_results = []
 
+    row_index = 1
+
     for entry_z_score in entry_z_scores:
         for exit_z_score in exit_z_scores:
             for stop_z_score in stop_z_scores:
-                results = run_backtest_for_all_rows(data_path, category_path, coint_file_path, entry_z_score, exit_z_score, stop_z_score)
-                if results:
-                    all_results.extend(results)
+                result = run_backtest_for_row(row_index, data_path, category_path, coint_file_path, entry_z_score,
+                                              exit_z_score, stop_z_score)
+                if result:
+                    result['entry_z_score'] = entry_z_score
+                    result['exit_z_score'] = exit_z_score
+                    result['stop_z_score'] = stop_z_score
+                    all_results.append(result)
 
     # Plot combined performance
     plot_combined_performance(all_results, category_path)
