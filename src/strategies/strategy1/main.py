@@ -10,7 +10,7 @@ logger = logger.setup_logging()
 
 # 사용자가 쉽게 수정할 수 있는 경로 변수 설정
 
-category_path = os.path.join(result_path_strategy1, "RWA")
+category_path = os.path.join(result_path_strategy1, "Layer1_Layer2")
 coint_file_path = os.path.join(category_path, "coint_pairs.csv")
 
 def run_backtest_for_row(row_index, base_path, result_path, coint_file_path, entry_z_score, exit_z_score, stop_z_score):
@@ -126,7 +126,7 @@ if __name__ == "__main__":
 
     all_results = []
 
-    row_index = 0
+    row_index = 1
 
     for entry_z_score in entry_z_scores:
         for exit_z_score in exit_z_scores:
