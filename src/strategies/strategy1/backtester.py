@@ -4,6 +4,7 @@ import os
 import pandas as pd
 import logging
 import matplotlib.pyplot as plt
+import strategy
 
 
 logger = logging.getLogger(__name__)
@@ -140,15 +141,20 @@ class Backtester:
     def calculate_metrics(self):
         logger.info("Calculating performance metrics")
         try:
+            total_days = 182
+            trade_log_df = pd.DataFrame(self.trade_log)
             total_returns = self.strategy.signals['equity'].iloc[-1] - 1
-            annualized_returns = (1 + total_returns) ** (365 / len(self.strategy.signals)) - 1
-            volatility = self.strategy.signals['returns'].std() * np.sqrt(365)
-            sharpe_ratio = ((1 + self.strategy.signals['returns'].mean()) ** 365 - 1 - 0.03) / volatility
+            annualized_returns = (1 + total_returns) ** (365/182) - 1
+            trading_days_per_year = 365
+            trades_per_year = trading_days_per_year / (total_days/ len(trade_log_df) * 2 )  # 총 거래 빈도
+            volatility = trade_log_df['return'].std() * (trades_per_year ** 0.5)
+            sharpe_ratio = (annualized_returns - 0.03) / volatility
             max_drawdown = self.calculate_max_drawdown(self.strategy.signals['equity'])
             winning_trades = (self.strategy.signals['returns'] > 0).sum()
-            win_rate = winning_trades / len(self.trade_log) if len(self.trade_log) > 0 else 0
+            win_rate = winning_trades / len(self.trade_log) * 2 if len(self.trade_log) > 0 else 0
             avg_trade_return = self.strategy.signals[self.strategy.signals['returns'] != 0]['returns'].mean()
-            num_trades = len(self.trade_log)
+            num_trades = len(self.trade_log)/2
+            lens = len(trade_log_df)
 
             self.performance_metrics = {
                 'total_return': total_returns,
@@ -158,7 +164,8 @@ class Backtester:
                 'max_drawdown': max_drawdown,
                 'win_rate': win_rate,
                 'average_profit_per_trade': avg_trade_return,
-                'num_trades': num_trades
+                'num_trades': num_trades,
+                'length' : lens
             }
         except Exception as e:
             logger.error(f"Error in calculating performance metrics: {e}")
@@ -176,6 +183,9 @@ class Backtester:
             print(f"Win Rate: {metrics['win_rate']:.2%}")
             print(f"Average Trade Return: {metrics['average_profit_per_trade']:.2%}")
             print(f"Total Number of Trades: {metrics['num_trades']}")
+            print(f"Total stop loss: {self.strategy.stop_loss_count}")
+
+
         except Exception as e:
             logger.error(f"Error in printing report: {e}")
 
