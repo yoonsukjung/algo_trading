@@ -19,7 +19,7 @@ categories_binance = pd.read_csv(os.path.join(output_dir,"categorized_binance.cs
 # Time range
 start_timestamp = pd.to_datetime(start_date, format='%Y-%m-%dT%H:%M:%SZ')
 end_timestamp = pd.to_datetime(end_date, format='%Y-%m-%dT%H:%M:%SZ')
-timestamps = pd.date_range(start=start_timestamp, end=end_timestamp, freq='15T')
+timestamps = pd.date_range(start=start_timestamp, end=end_timestamp, freq='15min')
 
 # Function to find cointegrated pairs
 def find_cointegrated_pairs(data):

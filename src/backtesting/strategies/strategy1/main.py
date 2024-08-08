@@ -5,8 +5,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from strategy import CointegrationStrategy
 from backtester import Backtester
-from src.strategies.utils import logger
+from src.backtesting.strategies.utils import logger
 from config import data_path, result_path_strategy1
+
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 logger = logger.setup_logging()
 
@@ -47,79 +49,38 @@ def run_backtest_for_row(row_index, base_path, result_path, coint_file_path, ent
             logger.warning(f"All z_scores are NaN for row {row_index}")
             return None
 
-        return backtester.performance_metrics  # 결과 반환
+        result = backtester.performance_metrics
+        result['entry_z_score'] = entry_z_score
+        result['exit_z_score'] = exit_z_score
+        result['stop_z_score'] = stop_z_score
+
+        return result  # 결과 반환
     except Exception as e:
         logger.error(f"Error in the main execution: {e}")
         return None
 
-def run_backtest_for_all_rows(base_path, result_path, coint_file_path, entry_z_score, exit_z_score, stop_z_score):
-    try:
-        file1 = pd.read_csv(coint_file_path)
-        num_rows = len(file1)
+# def run_backtest_for_all_rows(base_path, result_path, coint_file_path, entry_z_score, exit_z_score, stop_z_score):
+#     try:
+#         file1 = pd.read_csv(coint_file_path)
+#         num_rows = len(file1)
+#
+#         all_results = []
+#
+#         for row_index in range(num_rows):
+#             result = run_backtest_for_row(row_index, base_path, result_path, coint_file_path, entry_z_score, exit_z_score, stop_z_score)
+#             if result:
+#                 result['entry_z_score'] = entry_z_score
+#                 result['exit_z_score'] = exit_z_score
+#                 result['stop_z_score'] = stop_z_score
+#                 all_results.append(result)
+#
+#         return all_results
+#     except Exception as e:
+#         logger.error(f"Error in running backtest for all rows: {e}")
+#         return []
 
-        all_results = []
-
-        for row_index in range(num_rows):
-            result = run_backtest_for_row(row_index, base_path, result_path, coint_file_path, entry_z_score, exit_z_score, stop_z_score)
-            if result:
-                result['entry_z_score'] = entry_z_score
-                result['exit_z_score'] = exit_z_score
-                result['stop_z_score'] = stop_z_score
-                all_results.append(result)
-
-        return all_results
-    except Exception as e:
-        logger.error(f"Error in running backtest for all rows: {e}")
-        return []
 
 
-def plot_combined_performance(results, result_path):
-    try:
-        metrics = ['entry_z_score', 'exit_z_score', 'stop_z_score']
-
-        fig, axs = plt.subplots(3, 1, figsize=(14, 30))
-        fig.suptitle('Performance Metrics for Different Z-Scores', fontsize=16)
-
-        for idx, metric in enumerate(metrics):
-            ax1 = axs[idx]
-
-            # Extract metrics
-            x_values = [result[metric] for result in results]
-            total_returns = [result['total_return'] for result in results]
-            annualized_volatility = [result['annualized_volatility'] for result in results]
-            sharpe_ratios = [result['sharpe_ratio'] for result in results]
-
-            # Plot total returns
-            color = 'tab:blue'
-            ax1.set_xlabel(f'{metric.replace("_", " ").title()}')
-            ax1.set_ylabel('Total Returns', color=color)
-            ax1.scatter(x_values, total_returns, label='Total Returns', color=color)
-            ax1.tick_params(axis='y', labelcolor=color)
-
-            # Instantiate a second y-axis to plot volatility and sharpe ratio
-            ax2 = ax1.twinx()
-            color = 'tab:red'
-            ax2.set_ylabel('Volatility & Sharpe Ratio', color=color)
-            ax2.scatter(x_values, annualized_volatility, marker='x', label='Volatility', color='tab:orange')
-            ax2.scatter(x_values, sharpe_ratios, marker='^', label='Sharpe Ratio', color='tab:green')
-            ax2.tick_params(axis='y', labelcolor=color)
-
-            # Title and legends
-            ax1.set_title(f'Performance Metrics vs {metric.replace("_", " ").title()}')
-            lines1, labels1 = ax1.get_legend_handles_labels()
-            lines2, labels2 = ax2.get_legend_handles_labels()
-            ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper left', bbox_to_anchor=(0.1, 1.1))
-
-        # Adjust layout and save the plot
-        plt.tight_layout()
-        png_folder = os.path.join(result_path, 'combined_png')
-        os.makedirs(png_folder, exist_ok=True)
-        image_filename = os.path.join(png_folder, 'combined_performance_all_zscores.png')
-        plt.savefig(image_filename, dpi=300, bbox_inches='tight')
-        plt.close()
-
-    except Exception as e:
-        logger.error(f"Error in plotting combined performance: {e}")
 
 if __name__ == "__main__":
     entry_z_scores = [1.0, 1.2, 1.4, 1.6, 1.8, 2.0]
@@ -129,17 +90,20 @@ if __name__ == "__main__":
     all_results = []
 
     row_index = 0
+    max_workers = 4
 
-    for entry_z_score in entry_z_scores:
-        for exit_z_score in exit_z_scores:
-            for stop_z_score in stop_z_scores:
-                result = run_backtest_for_row(row_index, data_path, category_path, coint_file_path, entry_z_score,
-                                              exit_z_score, stop_z_score)
-                if result:
-                    result['entry_z_score'] = entry_z_score
-                    result['exit_z_score'] = exit_z_score
-                    result['stop_z_score'] = stop_z_score
-                    all_results.append(result)
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        futures = []
+        for entry_z_score in entry_z_scores:
+            for exit_z_score in exit_z_scores:
+                for stop_z_score in stop_z_scores:
+                    futures.append(executor.submit(run_backtest_for_row, row_index, data_path, category_path, coint_file_path, entry_z_score, exit_z_score, stop_z_score))
 
-    # Plot combined performance
-    plot_combined_performance(all_results, category_path)
+        for future in as_completed(futures):
+            result = future.result()
+            if result:
+                all_results.append(result)
+
+    # 결과 출력 또는 저장
+    print(all_results)
+

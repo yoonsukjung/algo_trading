@@ -1,5 +1,4 @@
 
-
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -8,10 +7,10 @@ import os
 from config import result_path_strategy1
 
 
-category_path = os.path.join(result_path_strategy1, "fan_token")
-target_pair = "CHZ_PORTO"
+category_path = os.path.join(result_path_strategy1, "RWA")
+target_pair = "RSR_LTO"
 pair_path = os.path.join(category_path, target_pair)
-target_path = os.path.join(pair_path, 'CHZ_PORTO.csv')
+target_path = os.path.join(pair_path, 'RSR_LTO.csv')
 
 df = pd.read_csv(target_path)
 df = df[['entry_z', 'exit_z', 'stop_z', 'total_ret']]
@@ -64,4 +63,3 @@ plt.subplots_adjust(top=0.95, right=0.85)
 os.makedirs(pair_path, exist_ok=True)
 image_filename = os.path.join(pair_path, "z_score_performance")
 plt.savefig(image_filename)
-

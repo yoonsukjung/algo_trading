@@ -1,4 +1,6 @@
 # 모든 파일과 디렉토리를 무시
 *
 
-!/src/strategies/utils/plotting_z_scores.py
+!/src/
+
+!/src/**
