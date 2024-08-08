@@ -144,7 +144,7 @@ class Backtester:
             total_returns = self.strategy.signals['equity'].iloc[-1] - 1
             annualized_returns = (1 + total_returns) ** (365 / len(self.strategy.signals)) - 1
             volatility = self.strategy.signals['returns'].std() * np.sqrt(365)
-            sharpe_ratio = ((1+ self.strategy.signals['returns'].mean()) ** 365 - 1 - 0.03) / volatility
+            sharpe_ratio = (annualized_returns - 0.03) / volatility
             max_drawdown = self.calculate_max_drawdown(self.strategy.signals['equity'])
             winning_trades = (self.strategy.signals['returns'] > 0).sum()
             win_rate = winning_trades / len(self.trade_log) if len(self.trade_log) > 0 else 0

@@ -11,6 +11,7 @@ class Strategy:
         self.position = 0
         self.indicators = pd.DataFrame(index=self.signals.index)
         self.indicators['stop_loss'] = False
+        self.stop_loss_count = 0  # stop_loss가 True로 변경된 횟수
 
     def generate_signals(self):
         raise NotImplementedError("Should implement generate_signals method")
@@ -42,7 +43,6 @@ class CointegrationStrategy(Strategy):
         self.stop_z_score = stop_z_score
         self.fee = fee
         self.slippage = slippage
-
 
     def calculate_theta(self):
         logger.info("Calculating theta")
@@ -98,14 +98,14 @@ class CointegrationStrategy(Strategy):
             else:
                 self.check_for_exit(index, exit_position, stop_loss)
 
-
-
         result = self.signals['trade'].ffill().shift().fillna(0).replace(
             {'long': 1, 'short': -1, 'close': 0})
         self.signals['position'] = result.infer_objects(copy=False)
 
     def update_indicators(self, index, exit_position, stop_loss):
         if stop_loss.loc[index]:
+            if not self.indicators.loc[index, 'stop_loss']:
+                self.stop_loss_count += 1  # stop_loss가 True로 변경될 때마다 카운트 증가
             self.indicators.loc[index:, 'stop_loss'] = True
         elif exit_position.loc[index]:
             self.indicators.loc[index:, 'stop_loss'] = False
@@ -141,5 +141,6 @@ class CointegrationStrategy(Strategy):
             self.generate_trade_signals()
             logger.info("Signals generated")
             print(self.signals[['z_score', 'trade', 'price1', 'price2']])
+            print(f"Total stop_loss count: {self.stop_loss_count}")  # 총 stop_loss 횟수 출력
         except Exception as e:
             logger.error(f"Error in generating signals: {e}")

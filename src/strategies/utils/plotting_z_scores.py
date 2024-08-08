@@ -1,14 +1,20 @@
 
 
-
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestRegressor
+import os
+from config import result_path_strategy1
 
-df = pd.read_csv('/Users/yoonsukjung/PycharmProjects/algo_trading/15m_results/strategy1_result/Layer1_Layer2/ETC_ATOM/ETC_ATOM.csv')
+
+category_path = os.path.join(result_path_strategy1, "fan_token")
+target_pair = "CHZ_PORTO"
+pair_path = os.path.join(category_path, target_pair)
+target_path = os.path.join(pair_path, 'CHZ_PORTO.csv')
+
+df = pd.read_csv(target_path)
 df = df[['entry_z', 'exit_z', 'stop_z', 'total_ret']]
-
 
 # 변수 설정
 X = df[['entry_z', 'exit_z', 'stop_z']]
@@ -54,8 +60,7 @@ axs[3].set_xticklabels([feature_names[i] for i in indices], rotation=45)
 
 plt.tight_layout()
 plt.subplots_adjust(top=0.95, right=0.85)
-plt.show()
 
-# 특성 중요도 출력
-for i, feature in enumerate(feature_names):
-    print(f"{feature}: {importances[indices[i]]:.4f}")
+os.makedirs(pair_path, exist_ok=True)
+image_filename = os.path.join(pair_path, "z_score_performance")
+plt.savefig(image_filename)
