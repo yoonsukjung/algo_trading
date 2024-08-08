@@ -198,75 +198,75 @@ class Backtester:
             logger.error(f"Error in calculating max drawdown: {e}")
             return 0
 
-    # def plot_performance(self):
-    #     logger.info("Plotting performance")
-    #     try:
-    #         plt.figure(figsize=(14, 10))
-    #
-    #         plot_title = f"{self.strategy.crypto1} and {self.strategy.crypto2} Performance"
-    #
-    #         # 첫 번째 그래프: 자산 가격 및 트레이딩 신호
-    #         plt.subplot(3, 1, 1)
-    #         plt.plot(self.strategy.data1.index, self.strategy.data1['close'], label='Asset 1 Close Price')
-    #         plt.plot(self.strategy.data2.index, self.strategy.data2['close'], label='Asset 2 Close Price')
-    #         if 'log_spread' in self.strategy.data1.columns:
-    #             plt.plot(self.strategy.data1.index, self.strategy.data1['log_spread'], label='Log Spread')
-    #
-    #         long_signals = self.strategy.signals[self.strategy.signals['trade'] == 'long']
-    #         short_signals = self.strategy.signals[self.strategy.signals['trade'] == 'short']
-    #         close_signals = self.strategy.signals[self.strategy.signals['trade'] == 'close']
-    #
-    #         plt.scatter(long_signals.index, self.strategy.data1.loc[long_signals.index, 'close'], marker='^',
-    #                     label='Long Signal', alpha=1)
-    #         plt.scatter(short_signals.index, self.strategy.data1.loc[short_signals.index, 'close'], marker='v',
-    #                     label='Short Signal', alpha=1)
-    #         plt.scatter(close_signals.index, self.strategy.data1.loc[close_signals.index, 'close'], marker='o',
-    #                     label='Close Signal', alpha=1)
-    #
-    #         plt.legend(loc='best', fontsize='small')
-    #         plt.title('Asset Prices and Trading Signals')
-    #         plt.xlim(self.strategy.data1.index.min(), self.strategy.data1.index.max())
-    #
-    #         # 두 번째 그래프: Equity Curve
-    #         plt.subplot(3, 1, 2)
-    #         plt.plot(self.strategy.signals.index, self.strategy.signals['equity'], label='Equity Curve', color='purple')
-    #         plt.legend(loc='best', fontsize='small')
-    #         plt.title('Equity Curve')
-    #         plt.xlim(self.strategy.data1.index.min(), self.strategy.data1.index.max())
-    #
-    #         # 세 번째 그래프: Z-score 및 트레이딩 신호
-    #         plt.subplot(3, 1, 3)
-    #         plt.plot(self.strategy.signals.index, self.strategy.signals['z_score'], label='Z-score')
-    #         plt.axhline(y=self.strategy.entry_z_score, color='r', linestyle='--', label='Entry Z-score')
-    #         plt.axhline(y=-self.strategy.entry_z_score, color='r', linestyle='--')
-    #         plt.axhline(y=self.strategy.exit_z_score, color='g', linestyle='--', label='Exit Z-score')
-    #         plt.axhline(y=-self.strategy.exit_z_score, color='g', linestyle='--')
-    #         plt.axhline(y=self.strategy.stop_z_score, color='y', linestyle='--', label='Stop-loss Z-score')
-    #         plt.axhline(y=-self.strategy.stop_z_score, color='y', linestyle='--')
-    #
-    #         plt.scatter(long_signals.index, self.strategy.signals.loc[long_signals.index, 'z_score'], marker='^',
-    #                     color='g', label='Long Signal', alpha=1)
-    #         plt.scatter(short_signals.index, self.strategy.signals.loc[short_signals.index, 'z_score'], marker='v',
-    #                     color='r', label='Short Signal', alpha=1)
-    #         plt.scatter(close_signals.index, self.strategy.signals.loc[close_signals.index, 'z_score'], marker='o',
-    #                     color='b', label='Close Signal', alpha=1)
-    #
-    #         plt.legend(loc='best', fontsize='small')
-    #         plt.title('Z-score and Trading Signals')
-    #         plt.xlim(self.strategy.data1.index.min(), self.strategy.data1.index.max())
-    #
-    #         plt.suptitle(plot_title)
-    #         plt.tight_layout(rect=[0, 0, 1, 0.96])
-    #
-    #         # Save the plot as an image file in the result_path
-    #         png_folder = os.path.join(self.result_path, f"{self.strategy.crypto1}_{self.strategy.crypto2}", 'png')
-    #         os.makedirs(png_folder, exist_ok=True)
-    #         image_filename = os.path.join(png_folder,
-    #                                       f"{self.strategy.entry_z_score}_{self.strategy.exit_z_score}_{self.strategy.stop_z_score}.png")
-    #         plt.savefig(image_filename)
-    #         # plt.show()  # 이 줄을 주석 처리하여 plot을 띄우지 않음
-    #     except Exception as e:
-    #         logger.error(f"Error in plotting performance: {e}")
+    def plot_performance(self):
+        logger.info("Plotting performance")
+        try:
+            plt.figure(figsize=(14, 10))
+
+            plot_title = f"{self.strategy.crypto1} and {self.strategy.crypto2} Performance"
+
+            # 첫 번째 그래프: 자산 가격 및 트레이딩 신호
+            plt.subplot(3, 1, 1)
+            plt.plot(self.strategy.data1.index, self.strategy.data1['close'], label='Asset 1 Close Price')
+            plt.plot(self.strategy.data2.index, self.strategy.data2['close'], label='Asset 2 Close Price')
+            if 'log_spread' in self.strategy.data1.columns:
+                plt.plot(self.strategy.data1.index, self.strategy.data1['log_spread'], label='Log Spread')
+
+            long_signals = self.strategy.signals[self.strategy.signals['trade'] == 'long']
+            short_signals = self.strategy.signals[self.strategy.signals['trade'] == 'short']
+            close_signals = self.strategy.signals[self.strategy.signals['trade'] == 'close']
+
+            plt.scatter(long_signals.index, self.strategy.data1.loc[long_signals.index, 'close'], marker='^',
+                        label='Long Signal', alpha=1)
+            plt.scatter(short_signals.index, self.strategy.data1.loc[short_signals.index, 'close'], marker='v',
+                        label='Short Signal', alpha=1)
+            plt.scatter(close_signals.index, self.strategy.data1.loc[close_signals.index, 'close'], marker='o',
+                        label='Close Signal', alpha=1)
+
+            plt.legend(loc='best', fontsize='small')
+            plt.title('Asset Prices and Trading Signals')
+            plt.xlim(self.strategy.data1.index.min(), self.strategy.data1.index.max())
+
+            # 두 번째 그래프: Equity Curve
+            plt.subplot(3, 1, 2)
+            plt.plot(self.strategy.signals.index, self.strategy.signals['equity'], label='Equity Curve', color='purple')
+            plt.legend(loc='best', fontsize='small')
+            plt.title('Equity Curve')
+            plt.xlim(self.strategy.data1.index.min(), self.strategy.data1.index.max())
+
+            # 세 번째 그래프: Z-score 및 트레이딩 신호
+            plt.subplot(3, 1, 3)
+            plt.plot(self.strategy.signals.index, self.strategy.signals['z_score'], label='Z-score')
+            plt.axhline(y=self.strategy.entry_z_score, color='r', linestyle='--', label='Entry Z-score')
+            plt.axhline(y=-self.strategy.entry_z_score, color='r', linestyle='--')
+            plt.axhline(y=self.strategy.exit_z_score, color='g', linestyle='--', label='Exit Z-score')
+            plt.axhline(y=-self.strategy.exit_z_score, color='g', linestyle='--')
+            plt.axhline(y=self.strategy.stop_z_score, color='y', linestyle='--', label='Stop-loss Z-score')
+            plt.axhline(y=-self.strategy.stop_z_score, color='y', linestyle='--')
+
+            plt.scatter(long_signals.index, self.strategy.signals.loc[long_signals.index, 'z_score'], marker='^',
+                        color='g', label='Long Signal', alpha=1)
+            plt.scatter(short_signals.index, self.strategy.signals.loc[short_signals.index, 'z_score'], marker='v',
+                        color='r', label='Short Signal', alpha=1)
+            plt.scatter(close_signals.index, self.strategy.signals.loc[close_signals.index, 'z_score'], marker='o',
+                        color='b', label='Close Signal', alpha=1)
+
+            plt.legend(loc='best', fontsize='small')
+            plt.title('Z-score and Trading Signals')
+            plt.xlim(self.strategy.data1.index.min(), self.strategy.data1.index.max())
+
+            plt.suptitle(plot_title)
+            plt.tight_layout(rect=[0, 0, 1, 0.96])
+
+            # Save the plot as an image file in the result_path
+            png_folder = os.path.join(self.result_path, f"{self.strategy.crypto1}_{self.strategy.crypto2}", 'png')
+            os.makedirs(png_folder, exist_ok=True)
+            image_filename = os.path.join(png_folder,
+                                          f"{self.strategy.entry_z_score}_{self.strategy.exit_z_score}_{self.strategy.stop_z_score}.png")
+            plt.savefig(image_filename)
+            # plt.show()  # 이 줄을 주석 처리하여 plot을 띄우지 않음
+        except Exception as e:
+            logger.error(f"Error in plotting performance: {e}")
 
     def save_results(self):
         try:
