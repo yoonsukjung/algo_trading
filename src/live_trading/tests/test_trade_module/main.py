@@ -9,7 +9,7 @@ def main():
 
 
     # 예제 주문 실행
-    order_response = order_manager.place_order('BTCUSDT', 'BUY', 'MARKET', 0.12)
+    order_response = order_manager.place_order('BTCUSDT', 'BUY', 'MARKET', 0.005)
     print(order_response)
 
     # 계좌 정보 확인

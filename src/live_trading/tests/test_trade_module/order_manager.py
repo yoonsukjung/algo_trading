@@ -1,3 +1,5 @@
+import json
+
 import requests
 import time
 import urllib.parse
@@ -38,7 +40,7 @@ class OrderManager:
         response = requests.post(endpoint, headers=headers, params=params)
         order_response = response.json()
 
-        self.notifer.send_message(f"Order response: {order_response}")
+        self.notifer.send_message(f"Order response: {json.dumps(order_response, indent=4)}")
 
         return order_response
 
