@@ -1,14 +1,12 @@
 import asyncio
 import json
 import websockets
-import numpy as np
 from collections import deque
-from config_test import api_key, api_secret, base_url
-from src.live_trading.tests.test_trade_module.spread_calculator import SpreadCalculator
+from src.live_trading.tests.test_module_2.spread_calculator import SpreadCalculator
 
 
 class TradeManager:
-    def __init__(self, spread_calculator, entry_threshold=2.0, exit_threshold=0.5, stop_loss_threshold=-2.0):
+    def __init__(self, spread_calculator, entry_threshold=1.8, exit_threshold=0.2, stop_loss_threshold=4.0):
         self.spread_calculator = spread_calculator
         self.entry_threshold = entry_threshold
         self.exit_threshold = exit_threshold
@@ -54,11 +52,11 @@ class TradeManager:
             elif z_score < -self.entry_threshold:
                 self.enter_position('long')
         else:
-            if (self.position == 'long' and z_score > self.exit_threshold) or (
-                    self.position == 'short' and z_score < -self.exit_threshold):
+            if (self.position == 'long' and z_score > -self.exit_threshold) or (
+                    self.position == 'short' and z_score < self.exit_threshold):
                 self.exit_position()
-            elif (self.position == 'long' and z_score < self.stop_loss_threshold) or (
-                    self.position == 'short' and z_score > -self.stop_loss_threshold):
+            elif (self.position == 'long' and z_score < -self.stop_loss_threshold) or (
+                    self.position == 'short' and z_score > self.stop_loss_threshold):
                 self.exit_position()
 
     def enter_position(self, direction):
