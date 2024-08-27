@@ -7,3 +7,11 @@ slack_webhook_url = 'https://hooks.slack.com/services/T078XU3BK8S/B07GT958T5X/yy
 
 slack_token = 'xoxb-7303955393298-7562887113412-2Qlgi16E2AL8EbEDvOMHnHne'
 slack_channel = '#tradingmonitor'
+
+crypto_A = 'LDOUSDT'
+crpyto_B = 'LUNCUSDT'
+HR = 0.328
+window = 3946
+entry_zscore = 1.6
+exit_zscore = 0.2
+stoploss_zscore = 3

@@ -3,16 +3,17 @@ import json
 import websockets
 from collections import deque
 from src.live_trading.tests.test_module_2.spread_calculator import SpreadCalculator
-
+from notifier import Notifier
 
 class TradeManager:
-    def __init__(self, spread_calculator, entry_threshold=1.8, exit_threshold=0.2, stop_loss_threshold=4.0):
+    def __init__(self, spread_calculator, entry_threshold=1.6, exit_threshold=0.2, stop_loss_threshold=3.0):
         self.spread_calculator = spread_calculator
         self.entry_threshold = entry_threshold
         self.exit_threshold = exit_threshold
         self.stop_loss_threshold = stop_loss_threshold
         self.position = None
         self.z_scores = deque(maxlen=spread_calculator.window_size)
+        self.notifier = Notifier()
 
     async def fetch_1m_data(self):
         url_a = f"wss://testnet.binance.vision/ws/{self.spread_calculator.pair_a}@kline_1m"
