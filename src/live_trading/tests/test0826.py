@@ -1,92 +1,128 @@
+import pandas as pd
+import numpy as np
 import asyncio
 import websockets
-import json
-import pandas as pd
 import requests
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
+import json
+import logging
+
+# 로깅 설정
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+class BinanceDataHandler:
+    def __init__(self, symbols, hr=0/71):
+        self.symbols = symbols
+        self.hr = hr
+        self.df = pd.DataFrame()
+        logging.info("Initializing BinanceDataHandler with symbols: %s and hr: %d", symbols, hr)
+        self.load_data()
+
+    def load_data(self):
+        logging.info("Loading data from CSV files")
+        for symbol in self.symbols:
+            file_path = f'/Users/yoonsukjung/Desktop/data/futures/1m/{symbol}_1m.csv'
+            logging.info("Reading data for symbol: %s from file: %s", symbol, file_path)
+            data = pd.read_csv(file_path, usecols=['timestamp', 'close'])
+            data['timestamp'] = pd.to_datetime(data['timestamp'])
+            data.set_index('timestamp', inplace=True)
+            data = data[-40000:]  # 최근 40000개의 데이터만 사용
+            if self.df.empty:
+                self.df = data.rename(columns={'close': symbol})
+            else:
+                self.df = self.df.join(data.rename(columns={'close': symbol}), how='outer')
+
+        self.df['spread'] = self.df[self.symbols[0]] - self.df[self.symbols[1]] * self.hr
+        logging.info("Data loaded successfully")
+
+    def fill_missing(self):
+        logging.info("Filling missing data")
+        now = datetime.utcnow()
+        end_time = now.replace(second=0, microsecond=0)
+        end_time = pd.Timestamp(end_time)
+        start_time = end_time - pd.Timedelta(minutes=40000)
+        all_timestamps = pd.date_range(start=start_time, end=end_time, freq='min')
+
+        missing_timestamps = all_timestamps.difference(self.df.index)
+        print(missing_timestamps)
+        for timestamp in missing_timestamps:
+            print(timestamp)
+            timestamp_ms = int(timestamp.timestamp() * 1000)
+
+            # 첫 번째 심볼에 대한 요청
+            url1 = f'https://api.binance.com/api/v3/klines?symbol={self.symbols[0]}&interval=1m&startTime={timestamp_ms}&endTime={timestamp_ms + 60000}'
+            response1 = requests.get(url1)
+            if response1.status_code == 200:
+                data1 = response1.json()
+                if data1:
+                    close_price1 = float(data1[0][4])
+                    self.df.at[timestamp, self.symbols[0]] = close_price1
+                    logging.info("Filled missing data for symbol: %s at timestamp: %s", self.symbols[0], timestamp)
+            else:
+                logging.warning("Failed to fetch data for symbol: %s at timestamp: %s", self.symbols[0], timestamp)
+
+            # 두 번째 심볼에 대한 요청
+            url2 = f'https://api.binance.com/api/v3/klines?symbol={self.symbols[1]}&interval=1m&startTime={timestamp_ms}&endTime={timestamp_ms + 60000}'
+            response2 = requests.get(url2)
+            if response2.status_code == 200:
+                data2 = response2.json()
+                if data2:
+                    close_price2 = float(data2[0][4])
+                    self.df.at[timestamp, self.symbols[1]] = close_price2
+                    logging.info("Filled missing data for symbol: %s at timestamp: %s", self.symbols[1], timestamp)
+            else:
+                logging.warning("Failed to fetch data for symbol: %s at timestamp: %s", self.symbols[1], timestamp)
+
+            if self.symbols[0] in self.df.columns and self.symbols[1] in self.df.columns:
+                self.df.at[timestamp, 'spread'] = self.df.at[timestamp, self.symbols[0]] - self.df.at[timestamp, self.symbols[1]] * self.hr
+
+        logging.info("Missing data filled successfully")
+
+    async def fetch_generate(self):
+        logging.info("Starting WebSocket connection")
+        async with websockets.connect('wss://stream.binance.com:9443/ws') as websocket:
+            streams = [f'{symbol.lower()}@kline_1m' for symbol in self.symbols]
+            await websocket.send(json.dumps({
+                "method": "SUBSCRIBE",
+                "params": streams,
+                "id": 1
+            }))
+            logging.info("Subscribed to WebSocket streams: %s", streams)
+
+            while True:
+                response = await websocket.recv()
+                data = json.loads(response)
+                if 'k' in data:
+                    symbol = data['s']
+                    close_price = float(data['k']['c'])
+                    timestamp = pd.to_datetime(data['k']['t'], unit='ms')
+
+                    if timestamp not in self.df.index:
+                        self.df.loc[timestamp] = [np.nan] * len(self.df.columns)
+
+                    if pd.isna(self.df.at[timestamp, symbol]):
+                        self.df.at[timestamp, symbol] = close_price
+                        self.df.at[timestamp, 'spread'] = self.df.at[timestamp, self.symbols[0]] - self.df.at[
+                            timestamp, self.symbols[1]] * self.hr
+
+                        # rolling_mean 및 rolling_std 계산
+                        if len(self.df) >= 40000:
+                            self.df.at[timestamp, 'rolling_mean'] = self.df['spread'][-40000:].mean()
+                            self.df.at[timestamp, 'rolling_std'] = self.df['spread'][-40000:].std()
+                        else:
+                            self.df.at[timestamp, 'rolling_mean'] = self.df['spread'].mean()
+                            self.df.at[timestamp, 'rolling_std'] = self.df['spread'].std()
+
+                        print(self.df[timestamp])
+
+                        logging.info("Updated data for symbol: %s at timestamp: %s", symbol, timestamp)
+
+async def main():
+    symbols = ['LDOUSDT', 'AAVEUSDT']
+    handler = BinanceDataHandler(symbols)
+    handler.fill_missing()
+    await handler.fetch_generate()
 
 
-# Function to fetch historical data
-def fetch_historical_data(symbol, interval, limit, end_time=None):
-    url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
-    if end_time:
-        url += f"&endTime={int(end_time.timestamp() * 1000)}"
-    response = requests.get(url)
-    data = response.json()
-    historical_data = []
-    for entry in data:
-        close_time = datetime.fromtimestamp(entry[6] / 1000, tz=timezone.utc) + timedelta(seconds=1)
-        close_time_str = close_time.strftime('%Y-%m-%d %H:%M:%S')
-        close_price = entry[4]
-        historical_data.append([close_time_str, symbol, close_price])
-    return historical_data
-
-
-# Fetch historical data
-symbol = "BTCUSDT"
-interval = "1m"
-limit = 40000
-historical_data = fetch_historical_data(symbol, interval, limit)
-
-# Create initial DataFrame
-df = pd.DataFrame(historical_data, columns=['Close Time', 'Symbol', 'Close Price'])
-df['Close Price'] = df['Close Price'].astype(float)
-
-# Get the last close time from historical data
-last_historical_close_time = datetime.strptime(df['Close Time'].iloc[-1], '%Y-%m-%d %H:%M:%S').replace(
-    tzinfo=timezone.utc)
-
-
-async def listen():
-    url = "wss://stream.binancefuture.com/ws/btcusdt@kline_1m"
-    last_close_time = None
-    first_websocket_data = True
-
-    async with websockets.connect(url) as websocket:
-        while True:
-            response = await websocket.recv()
-            data = json.loads(response)
-
-            # Extract relevant information
-            symbol = data['s']
-            close_time = data['k']['T']
-            close_price = data['k']['c']
-
-            # Convert close time to human-readable format and add 1 second
-            close_time_human = datetime.fromtimestamp(close_time / 1000, tz=timezone.utc) + timedelta(seconds=1)
-            close_time_human_str = close_time_human.strftime('%Y-%m-%d %H:%M:%S')
-
-            # Check if this is the first WebSocket data
-            if first_websocket_data:
-                first_websocket_data = False
-                # Check for missing data between last historical data and first WebSocket data
-                if close_time_human > last_historical_close_time + timedelta(minutes=1):
-                    missing_data = fetch_historical_data(symbol, interval, limit,
-                                                         end_time=close_time_human - timedelta(minutes=1))
-                    missing_df = pd.DataFrame(missing_data, columns=['Close Time', 'Symbol', 'Close Price'])
-                    missing_df['Close Price'] = missing_df['Close Price'].astype(float)
-                    global df
-                    df = pd.concat([df, missing_df], ignore_index=True)
-
-            # Check for duplicate messages
-            if close_time == last_close_time:
-                continue
-
-            # Update last close time
-            last_close_time = close_time
-
-            # Append data to DataFrame
-            new_data = pd.DataFrame([[close_time_human_str, symbol, float(close_price)]],
-                                    columns=['Close Time', 'Symbol', 'Close Price'])
-            df = pd.concat([df, new_data], ignore_index=True)
-
-            # Calculate rolling mean and std if we have enough data
-            if len(df) >= 100:
-                df['Rolling Mean'] = df['Close Price'].rolling(window=40000).mean()
-                df['Rolling Std'] = df['Close Price'].rolling(window=40000).std()
-
-            # Print the DataFrame
-            print(df.tail(5))  # Print the last 5 rows for brevity
-
-
-asyncio.get_event_loop().run_until_complete(listen())
+if __name__ == "__main__":
+    asyncio.run(main())
