@@ -1,3 +1,5 @@
+# data_handler.py
+
 import pandas as pd
 import numpy as np
 import asyncio
@@ -9,21 +11,24 @@ import logging
 from typing import List
 import time
 from collections import deque
+import os
 
-# 로깅 설정
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
+from trader import BinanceTrader
 
 class BinanceDataHandler:
-    def __init__(self, symbols: List[str], hr: float = 0.71):
+    def __init__(self, symbols: List[str], hr: float = 0.71, trader: BinanceTrader = None):
         self.symbols = symbols
         self.hr = hr
         self.df = pd.DataFrame()
         self.processed_timestamps = deque(maxlen=100000)  # Track (open_time, symbol)
+        self.trader = trader
         logging.info("심볼: %s 및 hr: %.2f와 함께 BinanceDataHandler 초기화 중", symbols, hr)
         # 데이터 로드 및 누락된 데이터 채우기
         self.load_data()
         self.fill_missing()
+
+        # Stop Loss Threshold 설정
+        self.STOP_LOSS_THRESHOLD = 3.0  # 예: z-score가 3.0 이상 또는 -3.0 이하일 때
 
     def load_data(self):
         logging.info("CSV 파일에서 데이터 로드 중")
@@ -129,13 +134,14 @@ class BinanceDataHandler:
                         self.df.at[open_time, symbol] = close_price
                         logging.info("심볼: %s의 타임스탬프: %s에서 누락된 데이터 채움", symbol, open_time)
                 # 배치 채움 후 스프레드 업데이트
-                for symbol in self.symbols:
-                    klines = fetch_klines(symbol, batch_start, batch_end)
-                    batch_filled_times = [pd.to_datetime(k[0], unit='ms', utc=True) for k in klines] if klines else []
-                    for timestamp in batch_filled_times:
-                        if all(sym in self.df.columns for sym in self.symbols):
-                            self.df.at[timestamp, 'spread'] = self.df.at[timestamp, self.symbols[0]] - self.df.at[
+                if all(sym in self.df.columns for sym in self.symbols):
+                    for symbol in self.symbols:
+                        klines = fetch_klines(symbol, batch_start, batch_end)
+                        batch_filled_times = [pd.to_datetime(k[0], unit='ms', utc=True) for k in klines] if klines else []
+                        for timestamp in batch_filled_times:
+                            spread = self.df.at[timestamp, self.symbols[0]] - self.df.at[
                                 timestamp, self.symbols[1]] * self.hr
+                            self.df.at[timestamp, 'spread'] = spread
                 # API 레이트 리밋을 준수하기 위해 짧은 대기 시간 추가 가능
                 # time.sleep(0.5)
 
@@ -194,15 +200,19 @@ class BinanceDataHandler:
                                 if window > 0:
                                     rolling_mean = self.df['spread'].rolling(window=window, min_periods=1).mean().iloc[-1]
                                     rolling_std = self.df['spread'].rolling(window=window, min_periods=1).std().iloc[-1]
+                                    z_score = (spread - rolling_mean) / rolling_std if rolling_std != 0 else 0
                                     self.df.at[open_time, 'rolling_mean'] = rolling_mean
                                     self.df.at[open_time, 'rolling_std'] = rolling_std
-                                    z_score = (spread - rolling_mean ) / rolling_std
                                     self.df.at[open_time, 'z_score'] = z_score
 
                                 logging.info("심볼: %s의 타임스탬프: %s에서 데이터 업데이트됨", symbol, open_time)
                                 logging.debug("스프레드: %.5f, 롤링 평균: %.5f, 롤링 표준편차: %.5f",
                                               spread, rolling_mean, rolling_std)
-                                logging.info("z score: %.5f",z_score)
+                                logging.info("z score: %.5f", z_score)
+
+                                # 매매 로직 실행
+                                if self.trader:
+                                    self.execute_trading_logic(open_time, z_score)
 
                             # 처리된 타임스탬프와 심볼을 기록하여 중복 처리를 방지
                             self.processed_timestamps.append((open_time, symbol))
@@ -213,16 +223,53 @@ class BinanceDataHandler:
                 logging.info("WebSocket 다시 연결 시도 중...")
                 await asyncio.sleep(5)  # 재접속 전에 5초 대기
 
-    async def run(self):
-        # WebSocket 데이터 수신 시작
-        await self.fetch_generate()
+    def execute_trading_logic(self, timestamp: pd.Timestamp, z_score: float):
+        """
+        z_score에 따라 매매 조건을 평가하고 주문을 실행합니다.
+        :param timestamp: 데이터 타임스탬프
+        :param z_score: 계산된 z-score
+        """
+        # 매매 조건 설정
+        ENTRY_THRESHOLD = 2.0
+        EXIT_THRESHOLD = 0.0
+        STOP_LOSS_THRESHOLD = self.STOP_LOSS_THRESHOLD
 
+        # 전략: z_score이 ENTRY_THRESHOLD 이상이면 매도, 매수 포지션 진입
+        #        z_score이 -ENTRY_THRESHOLD 이하이면 매수, 매도 포지션 진입
+        #        z_score이 EXIT_THRESHOLD를 넘어서면 포지션 청산
+        #        z_score이 STOP_LOSS_THRESHOLD 이상(절대값)일 때 포지션 청산
 
-async def main():
-    symbols = ['LDOUSDT', 'AAVEUSDT']
-    handler = BinanceDataHandler(symbols)
-    await handler.run()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+        if z_score > ENTRY_THRESHOLD:
+            logging.info("z_score %.2f > ENTRY_THRESHOLD %.2f: 포지션 진입 (매도)", z_score, ENTRY_THRESHOLD)
+            # 예시: 첫 번째 심볼 매도, 두 번째 심볼 매수
+            self.trader.place_order(self.symbols[0], 'SELL', amount=100.0)  # 금액 단위
+            self.trader.place_order(self.symbols[1], 'BUY', amount=100.0)
+        elif z_score < -ENTRY_THRESHOLD:
+            logging.info("z_score %.2f < -ENTRY_THRESHOLD %.2f: 포지션 진입 (매수)", z_score, ENTRY_THRESHOLD)
+            # 예시: 첫 번째 심볼 매수, 두 번째 심볼 매도
+            self.trader.place_order(self.symbols[0], 'BUY', amount=100.0)
+            self.trader.place_order(self.symbols[1], 'SELL', amount=100.0)
+        elif abs(z_score) < EXIT_THRESHOLD:
+            logging.info("z_score %.2f < EXIT_THRESHOLD %.2f: 포지션 청산", z_score, EXIT_THRESHOLD)
+            # 현재 포지션 조회 후 청산
+            for symbol in self.symbols:
+                position_size = self.trader.get_position_size(symbol)
+                if position_size != 0:
+                    side = 'SELL' if position_size > 0 else 'BUY'
+                    # 포지션 청산 시 금액 단위로 주문할 수 있도록 수정
+                    current_price = self.trader.get_current_price(symbol)
+                    if current_price is not None:
+                        amount = abs(position_size) * current_price
+                        self.trader.place_order(symbol, side, amount=amount)
+        elif abs(z_score) > STOP_LOSS_THRESHOLD:
+            logging.info("z_score %.2f > STOP_LOSS_THRESHOLD %.2f: Stop Loss Triggered - 포지션 청산", z_score, STOP_LOSS_THRESHOLD)
+            # 현재 포지션 조회 후 청산
+            for symbol in self.symbols:
+                position_size = self.trader.get_position_size(symbol)
+                if position_size != 0:
+                    side = 'SELL' if position_size > 0 else 'BUY'
+                    # 포지션 청산 시 금액 단위로 주문할 수 있도록 수정
+                    current_price = self.trader.get_current_price(symbol)
+                    if current_price is not None:
+                        amount = abs(position_size) * current_price
+                        self.trader.place_order(symbol, side, amount=amount)
