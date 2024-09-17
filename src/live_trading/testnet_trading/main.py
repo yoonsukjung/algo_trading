@@ -1,31 +1,28 @@
-import yaml
-from threading import Thread
-from src.live_trading.testnet_trading.exchange.binance_trader import BinanceTrader
-from src.live_trading.testnet_trading.utils.logger import setup_logger
+# main.py
 
-logger = setup_logger()
+import asyncio
+import logging
+from typing import List
 
-def load_config(file_path: str) -> dict:
-    with open(file_path, 'r') as file:
-        return yaml.safe_load(file)
+from trader import BinanceTrader
+from data_handler import BinanceDataHandler
+from config import BINANCE_API_KEY, BINANCE_API_SECRET, ENVIRONMENT
 
-def run_trader(api_key: str, secret_key: str, symbol1: str, symbol2: str, strategy_params: dict):
-    trader = BinanceTrader(api_key, secret_key)
-    trader.run_strategy(symbol1, symbol2, strategy_params)
+# 로깅 설정 (필요 시 재설정 가능)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+
+async def main():
+    symbols = ['LDOUSDT', 'AAVEUSDT']  # 거래할 심볼 리스트
+
+    if not BINANCE_API_KEY or not BINANCE_API_SECRET:
+        logging.error("Binance API 키가 설정되지 않았습니다. config.py를 확인하세요.")
+        return
+
+    trader = BinanceTrader(api_key=BINANCE_API_KEY, api_secret=BINANCE_API_SECRET, symbols=symbols)
+    handler = BinanceDataHandler(symbols, trader=trader)
+    await handler.run()
+
 
 if __name__ == "__main__":
-    config = load_config('config.yaml')
-    api_key = config['api_key']
-    secret_key = config['secret_key']
-
-    threads = []
-    for pair in config['trading_pairs']:
-        symbol1 = pair['symbol1']
-        symbol2 = pair['symbol2']
-        strategy_params = pair['strategy_params']
-        thread = Thread(target=run_trader, args=(api_key, secret_key, symbol1, symbol2, strategy_params))
-        thread.start()
-        threads.append(thread)
-
-    for thread in threads:
-        thread.join()
+    asyncio.run(main())

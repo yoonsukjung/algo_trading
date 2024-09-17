@@ -14,6 +14,7 @@ from collections import deque
 import os
 
 from trader import BinanceTrader
+from config import ENVIRONMENT, PRODUCTION_WS_URL, TESTNET_WS_URL
 
 class BinanceDataHandler:
     def __init__(self, symbols: List[str], hr: float = 0.71, trader: BinanceTrader = None):
@@ -28,7 +29,7 @@ class BinanceDataHandler:
         self.fill_missing()
 
         # Stop Loss Threshold 설정
-        self.STOP_LOSS_THRESHOLD = 4.0  # 예: z-score가 3.0 이상 또는 -3.0 이하일 때
+        self.STOP_LOSS_THRESHOLD = 3.0  # 예: z-score가 3.0 이상 또는 -3.0 이하일 때
 
     def load_data(self):
         logging.info("CSV 파일에서 데이터 로드 중")
@@ -152,8 +153,17 @@ class BinanceDataHandler:
 
     async def fetch_generate(self):
         logging.info("WebSocket 연결 시작")
-        streams = '/'.join([f'{symbol.lower()}@kline_1m' for symbol in self.symbols])
-        url = f"wss://stream.binance.com:9443/stream?streams={streams}"
+        # 환경에 따라 WebSocket URL 설정
+        if ENVIRONMENT.lower() == 'testnet':
+            ws_url = TESTNET_WS_URL
+            streams = '/'.join([f'{symbol.lower()}@kline_1m' for symbol in self.symbols])
+            url = f"{ws_url}?streams={streams}"
+            logging.info("Testnet WebSocket URL: %s", url)
+        else:
+            ws_url = PRODUCTION_WS_URL
+            streams = '/'.join([f'{symbol.lower()}@kline_1m' for symbol in self.symbols])
+            url = f"{ws_url}?streams={streams}"
+            logging.info("Production WebSocket URL: %s", url)
 
         while True:
             try:
@@ -230,8 +240,8 @@ class BinanceDataHandler:
         :param z_score: 계산된 z-score
         """
         # 매매 조건 설정
-        ENTRY_THRESHOLD = 1.6
-        EXIT_THRESHOLD = 0.2
+        ENTRY_THRESHOLD = 1.5
+        EXIT_THRESHOLD = 0.3
         STOP_LOSS_THRESHOLD = self.STOP_LOSS_THRESHOLD
 
         # 전략: z_score이 ENTRY_THRESHOLD 이상이면 매도, 매수 포지션 진입
@@ -256,7 +266,6 @@ class BinanceDataHandler:
                 position_size = self.trader.get_position_size(symbol)
                 if position_size != 0:
                     side = 'SELL' if position_size > 0 else 'BUY'
-                    # 포지션 청산 시 금액 단위로 주문할 수 있도록 수정
                     current_price = self.trader.get_current_price(symbol)
                     if current_price is not None:
                         amount = abs(position_size) * current_price
@@ -268,8 +277,11 @@ class BinanceDataHandler:
                 position_size = self.trader.get_position_size(symbol)
                 if position_size != 0:
                     side = 'SELL' if position_size > 0 else 'BUY'
-                    # 포지션 청산 시 금액 단위로 주문할 수 있도록 수정
                     current_price = self.trader.get_current_price(symbol)
                     if current_price is not None:
                         amount = abs(position_size) * current_price
                         self.trader.place_order(symbol, side, amount=amount)
+
+    async def run(self):
+        # WebSocket 데이터 수신 시작
+        await self.fetch_generate()
