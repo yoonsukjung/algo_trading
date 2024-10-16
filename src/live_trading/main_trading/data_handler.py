@@ -13,15 +13,12 @@ import time
 from collections import deque
 import os
 
-from trader import BinanceTrader
-
 class BinanceDataHandler:
-    def __init__(self, symbols: List[str], hr: float = 0.71, trader: BinanceTrader = None):
+    def __init__(self, symbols: List[str], hr: float = 0.71):
         self.symbols = symbols
         self.hr = hr
         self.df = pd.DataFrame()
         self.processed_timestamps = deque(maxlen=100000)  # Track (open_time, symbol)
-        self.trader = trader
         logging.info("심볼: %s 및 hr: %.2f와 함께 BinanceDataHandler 초기화 중", symbols, hr)
         # 데이터 로드 및 누락된 데이터 채우기
         self.load_data()
@@ -222,54 +219,3 @@ class BinanceDataHandler:
                 logging.error("WebSocket 연결 오류: %s", e)
                 logging.info("WebSocket 다시 연결 시도 중...")
                 await asyncio.sleep(5)  # 재접속 전에 5초 대기
-
-    def execute_trading_logic(self, timestamp: pd.Timestamp, z_score: float):
-        """
-        z_score에 따라 매매 조건을 평가하고 주문을 실행합니다.
-        :param timestamp: 데이터 타임스탬프
-        :param z_score: 계산된 z-score
-        """
-        # 매매 조건 설정
-        ENTRY_THRESHOLD = 1.6
-        EXIT_THRESHOLD = 0.2
-        STOP_LOSS_THRESHOLD = self.STOP_LOSS_THRESHOLD
-
-        # 전략: z_score이 ENTRY_THRESHOLD 이상이면 매도, 매수 포지션 진입
-        #        z_score이 -ENTRY_THRESHOLD 이하이면 매수, 매도 포지션 진입
-        #        z_score이 EXIT_THRESHOLD를 넘어서면 포지션 청산
-        #        z_score이 STOP_LOSS_THRESHOLD 이상(절대값)일 때 포지션 청산
-
-        if z_score > ENTRY_THRESHOLD:
-            logging.info("z_score %.2f > ENTRY_THRESHOLD %.2f: 포지션 진입 (매도)", z_score, ENTRY_THRESHOLD)
-            # 예시: 첫 번째 심볼 매도, 두 번째 심볼 매수
-            self.trader.place_order(self.symbols[0], 'SELL', amount=100.0)  # 금액 단위
-            self.trader.place_order(self.symbols[1], 'BUY', amount=100.0)
-        elif z_score < -ENTRY_THRESHOLD:
-            logging.info("z_score %.2f < -ENTRY_THRESHOLD %.2f: 포지션 진입 (매수)", z_score, ENTRY_THRESHOLD)
-            # 예시: 첫 번째 심볼 매수, 두 번째 심볼 매도
-            self.trader.place_order(self.symbols[0], 'BUY', amount=100.0)
-            self.trader.place_order(self.symbols[1], 'SELL', amount=100.0)
-        elif abs(z_score) < EXIT_THRESHOLD:
-            logging.info("z_score %.2f < EXIT_THRESHOLD %.2f: 포지션 청산", z_score, EXIT_THRESHOLD)
-            # 현재 포지션 조회 후 청산
-            for symbol in self.symbols:
-                position_size = self.trader.get_position_size(symbol)
-                if position_size != 0:
-                    side = 'SELL' if position_size > 0 else 'BUY'
-                    # 포지션 청산 시 금액 단위로 주문할 수 있도록 수정
-                    current_price = self.trader.get_current_price(symbol)
-                    if current_price is not None:
-                        amount = abs(position_size) * current_price
-                        self.trader.place_order(symbol, side, amount=amount)
-        elif abs(z_score) > STOP_LOSS_THRESHOLD:
-            logging.info("z_score %.2f > STOP_LOSS_THRESHOLD %.2f: Stop Loss Triggered - 포지션 청산", z_score, STOP_LOSS_THRESHOLD)
-            # 현재 포지션 조회 후 청산
-            for symbol in self.symbols:
-                position_size = self.trader.get_position_size(symbol)
-                if position_size != 0:
-                    side = 'SELL' if position_size > 0 else 'BUY'
-                    # 포지션 청산 시 금액 단위로 주문할 수 있도록 수정
-                    current_price = self.trader.get_current_price(symbol)
-                    if current_price is not None:
-                        amount = abs(position_size) * current_price
-                        self.trader.place_order(symbol, side, amount=amount)

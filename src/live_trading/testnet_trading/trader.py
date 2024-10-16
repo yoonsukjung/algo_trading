@@ -1,143 +1,207 @@
-# trader.py
-
-import hmac
-import hashlib
-import urllib.parse
-import requests
+import pandas as pd
+import numpy as np
 import time
 import logging
-from typing import List
-from config import BINANCE_API_KEY, BINANCE_API_SECRET, ENVIRONMENT, TESTNET_BASE_URL, PRODUCTION_BASE_URL
+from binance.client import Client
+from binance.exceptions import BinanceAPIException
+
+# 로깅 설정
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s:%(message)s')
+
+# Binance Testnet API 키와 시크릿 설정
+API_KEY = 'c9bf6be04e128c777ce42cec916e2a13f86a4ff8f7a96d72f7b22228f56678c9'
+API_SECRET = '28b16206a64c17f060171dda13736a23d941e653778110ac7106ddf31332163b'
+
+# Binance Testnet 클라이언트 설정
+client = Client(API_KEY, API_SECRET)
+client.FUTURES_URL = 'https://testnet.binancefuture.com/fapi'
 
 
-class BinanceTrader:
-    def __init__(self, api_key: str, api_secret: str, symbols: List[str]):
-        self.api_key = api_key
-        self.api_secret = api_secret.encode()
+class Trader:
+    def __init__(self, client):
+        self.client = client
+        self.positions = {}  # 각 심볼별 포지션을 저장하는 딕셔너리
 
-        # 환경에 따라 Base URL 설정
-        if ENVIRONMENT.lower() == 'testnet':
-            self.base_url = TESTNET_BASE_URL
-            logging.info("BinanceTrader가 Testnet 환경으로 초기화되었습니다.")
-        else:
-            self.base_url = PRODUCTION_BASE_URL
-            logging.info("BinanceTrader가 Production 환경으로 초기화되었습니다.")
-
-        self.symbols = symbols
-        self.session = requests.Session()
-        self.session.headers.update({'X-MBX-APIKEY': self.api_key})
-        logging.info("BinanceTrader 초기화 완료")
-
-    def _get_timestamp(self):
-        return int(time.time() * 1000)
-
-    def _sign(self, params: dict) -> str:
-        query_string = urllib.parse.urlencode(params)
-        signature = hmac.new(self.api_secret, query_string.encode(), hashlib.sha256).hexdigest()
-        return signature
-
-    def _send_request(self, method: str, endpoint: str, params: dict) -> dict:
-        params['timestamp'] = self._get_timestamp()
-        params['signature'] = self._sign(params)
-        url = self.base_url + endpoint
+    def place_order(self, symbol, side, amount):
+        """
+        Binance API를 사용하여 주문을 실행합니다.
+        amount는 해당 거래에 사용할 총 자산(USDT) 금액으로 가정합니다.
+        """
         try:
-            if method == 'GET':
-                response = self.session.get(url, params=params, timeout=10)
-            elif method == 'POST':
-                response = self.session.post(url, params=params, timeout=10)
-            else:
-                raise ValueError("Unsupported HTTP method")
-            response.raise_for_status()
-            return response.json()
+            # 현재 가격 조회
+            price = self.get_current_price(symbol)
+            if price is None:
+                logging.error(f"{symbol}의 현재 가격을 가져올 수 없습니다. 주문이 실행되지 않았습니다.")
+                return
+
+            # 심볼 정보 가져오기 (최소 주문 수량 및 단위)
+            symbol_info = self.client.futures_exchange_info()
+            symbol_filters = next((item for item in symbol_info['symbols'] if item["symbol"] == symbol), None)
+            if symbol_filters is None:
+                logging.error(f"{symbol}의 정보를 가져올 수 없습니다. 주문이 실행되지 않았습니다.")
+                return
+
+            # LOT_SIZE 필터 찾기
+            lot_size_filter = next((f for f in symbol_filters['filters'] if f['filterType'] == 'LOT_SIZE'), None)
+            if lot_size_filter is None:
+                logging.error(f"{symbol}의 LOT_SIZE 필터를 찾을 수 없습니다. 주문이 실행되지 않았습니다.")
+                return
+
+            step_size = float(lot_size_filter['stepSize'])
+            min_qty = float(lot_size_filter['minQty'])
+
+            # PRICE_FILTER 필터 찾기
+            price_filter = next((f for f in symbol_filters['filters'] if f['filterType'] == 'PRICE_FILTER'), None)
+            if price_filter is None:
+                logging.error(f"{symbol}의 PRICE_FILTER를 찾을 수 없습니다. 주문이 실행되지 않았습니다.")
+                return
+
+            tick_size = float(price_filter['tickSize'])
+
+            # 수량 계산
+            quantity = amount / price
+
+            # 수량 및 가격 조정
+            quantity_precision = int(round(-np.log10(step_size)))
+            price_precision = int(round(-np.log10(tick_size)))
+
+            quantity = round(quantity, quantity_precision)
+            price = round(price, price_precision)
+
+            if quantity < min_qty:
+                logging.error(f"수량 {quantity}이 최소 거래 수량 {min_qty}보다 적습니다. 주문이 실행되지 않았습니다.")
+                return
+
+            # 시장가 주문 실행
+            order = self.client.futures_create_order(
+                symbol=symbol,
+                side=side,
+                type='MARKET',
+                quantity=quantity
+            )
+            logging.info(f"주문이 실행되었습니다: {order}")
+
+            # 포지션 크기 업데이트
+            if side == 'BUY':
+                self.positions[symbol] = self.positions.get(symbol, 0) + quantity
+            elif side == 'SELL':
+                self.positions[symbol] = self.positions.get(symbol, 0) - quantity
+
+        except BinanceAPIException as e:
+            logging.error(f"Binance API 예외 발생: {e.message}")
         except Exception as e:
-            logging.error("API 요청 오류: %s", e)
-            return {}
+            logging.error(f"예외가 발생했습니다: {e}")
 
-    def place_order(self, symbol: str, side: str, amount: float, order_type: str = 'MARKET'):
+    def get_position_size(self, symbol):
         """
-        금액 기반으로 심볼에 대한 주문을 실행합니다.
-        :param symbol: 거래할 심볼 (예: 'LDOUSDT')
-        :param side: 'BUY' 또는 'SELL'
-        :param amount: 주문할 금액 (USD 등)
-        :param order_type: 주문 유형 (기본값은 'MARKET')
+        해당 심볼의 현재 포지션 크기를 반환합니다.
         """
-        current_price = self.get_current_price(symbol)
-        if current_price is None:
-            logging.error("현재 가격을 가져올 수 없어 주문을 실행할 수 없습니다.")
+        return self.positions.get(symbol, 0.0)
+
+    def get_current_price(self, symbol):
+        """
+        해당 심볼의 현재 가격을 가져옵니다.
+        """
+        try:
+            ticker = self.client.futures_symbol_ticker(symbol=symbol)
+            return float(ticker['price'])
+        except BinanceAPIException as e:
+            logging.error(f"Binance API 예외 발생: {e.message}")
+            return None
+        except Exception as e:
+            logging.error(f"예외가 발생했습니다: {e}")
+            return None
+
+
+class TradingBot:
+    def __init__(self, trader, symbols, stop_loss_threshold=3.0):
+        self.trader = trader
+        self.symbols = symbols
+        self.STOP_LOSS_THRESHOLD = stop_loss_threshold
+        self.position_open = False  # 포지션이 열려있는지 여부
+        self.lockout = False  # 잠금 상태 여부
+
+    def close_all_positions(self, timestamp: pd.Timestamp):
+        """
+        현재 열린 모든 포지션을 청산합니다.
+        :param timestamp: 데이터 타임스탬프
+        """
+        logging.info(f"[{timestamp}] 모든 포지션 청산 시작")
+        for symbol in self.symbols:
+            position_size = self.trader.get_position_size(symbol)
+            if position_size != 0:
+                side = 'SELL' if position_size > 0 else 'BUY'
+                current_price = self.trader.get_current_price(symbol)
+                if current_price is not None:
+                    amount = abs(position_size) * current_price
+                    self.trader.place_order(symbol, side, amount=amount)
+                    logging.info(f"[{timestamp}] {symbol} - {side} - 금액: {amount}")
+        self.position_open = False
+        logging.info(f"[{timestamp}] 모든 포지션 청산 완료")
+
+    def execute_trading_logic(self, timestamp: pd.Timestamp, z_score: float):
+        """
+        z_score에 따라 매매 조건을 평가하고 주문을 실행합니다.
+        :param timestamp: 데이터 타임스탬프
+        :param z_score: 계산된 z-score
+        """
+        # 매매 조건 설정
+        ENTRY_THRESHOLD = 1.5
+        EXIT_THRESHOLD = 0.2
+        STOP_LOSS_THRESHOLD = self.STOP_LOSS_THRESHOLD
+
+        abs_z = abs(z_score)
+
+        # 로그에 타임스탬프 추가
+        logging.info(f"[{timestamp}] Evaluating z_score: {z_score}")
+
+        # 잠금 상태인 경우
+        if self.lockout:
+            if abs_z < EXIT_THRESHOLD:
+                self.lockout = False
+                logging.info(f"[{timestamp}] |z_score| < {EXIT_THRESHOLD}: 잠금 상태 해제")
+            else:
+                logging.info(f"[{timestamp}] 잠금 상태 유지 |z_score|: {z_score}")
+            return  # 잠금 상태일 때는 추가적인 행동 불가
+
+        # 포지션이 열려있는 경우
+        if self.position_open:
+            # 강제 포지션 청산 조건
+            if abs_z > STOP_LOSS_THRESHOLD:
+                logging.info(
+                    f"[{timestamp}] |z_score| {z_score} > STOP_LOSS_THRESHOLD {STOP_LOSS_THRESHOLD}: 손절매 트리거 - 포지션 청산")
+                self.close_all_positions(timestamp)
+                self.lockout = True  # 강제 청산 후 잠금 상태 설정
+                return
+
+            # 일반 포지션 청산 조건
+            if abs_z < EXIT_THRESHOLD:
+                logging.info(f"[{timestamp}] |z_score| {z_score} < EXIT_THRESHOLD {EXIT_THRESHOLD}: 포지션 청산")
+                self.close_all_positions(timestamp)
+                return
+
+            # 포지션 유지
+            logging.info(f"[{timestamp}] 포지션 유지 |z_score|: {z_score}")
             return
 
-        quantity = amount / current_price
-        quantity = self._adjust_quantity(symbol, quantity)
-
-        if quantity <= 0:
-            logging.error("계산된 수량이 0 이하입니다. 주문을 건너뜁니다.")
+        # 포지션이 열려있지 않고 잠금 상태도 아닌 경우
+        if abs_z > STOP_LOSS_THRESHOLD:
+            # 포지션이 열려있지 않을 때 |z| > STOP_LOSS_THRESHOLD 이면 포지션을 열지 않음
+            logging.info(f"[{timestamp}] |z_score| {z_score} > STOP_LOSS_THRESHOLD {STOP_LOSS_THRESHOLD} (포지션 미오픈)")
             return
 
-        endpoint = '/fapi/v1/order'
-        params = {
-            'symbol': symbol,
-            'side': side,
-            'type': order_type,
-            'quantity': quantity,
-            'recvWindow': 5000
-        }
-        response = self._send_request('POST', endpoint, params)
-        if response:
-            logging.info("주문 성공: %s %s %.6f", symbol, side, quantity)
-            logging.debug("주문 응답: %s", response)
-        else:
-            logging.error("주문 실패: %s %s %.6f", symbol, side, quantity)
+        if abs_z > ENTRY_THRESHOLD:
+            # 포지션 열기
+            if z_score > ENTRY_THRESHOLD:
+                logging.info(f"[{timestamp}] z_score {z_score} > ENTRY_THRESHOLD {ENTRY_THRESHOLD}: 포지션 진입 (매도)")
+                self.trader.place_order(self.symbols[0], 'SELL', amount=1000.0)
+                self.trader.place_order(self.symbols[1], 'BUY', amount=1000.0)
+            elif z_score < -ENTRY_THRESHOLD:
+                logging.info(f"[{timestamp}] z_score {z_score} < -ENTRY_THRESHOLD {-ENTRY_THRESHOLD}: 포지션 진입 (매수)")
+                self.trader.place_order(self.symbols[0], 'BUY', amount=1000.0)
+                self.trader.place_order(self.symbols[1], 'SELL', amount=1000.0)
+            self.position_open = True
+            return
 
-    def get_current_price(self, symbol: str) -> float:
-        """
-        심볼의 현재 가격을 가져옵니다.
-        :param symbol: 심볼 (예: 'LDOUSDT')
-        :return: 현재 가격 또는 None
-        """
-        endpoint = '/fapi/v1/ticker/price'
-        params = {'symbol': symbol}
-        response = self._send_request('GET', endpoint, params)
-        if response and 'price' in response:
-            return float(response['price'])
-        logging.error("현재 가격을 가져오는 데 실패했습니다: %s", symbol)
-        return None
-
-    def _adjust_quantity(self, symbol: str, quantity: float) -> float:
-        """
-        Binance 규칙에 맞게 수량을 조정합니다 (소수점 제한 등).
-        :param symbol: 심볼 (예: 'LDOUSDT')
-        :param quantity: 원래 계산된 수량
-        :return: 조정된 수량
-        """
-        endpoint = '/fapi/v1/exchangeInfo'
-        params = {}
-        response = self._send_request('GET', endpoint, params)
-        if response and 'symbols' in response:
-            for sym in response['symbols']:
-                if sym['symbol'] == symbol:
-                    for filter in sym['filters']:
-                        if filter['filterType'] == 'LOT_SIZE':
-                            step_size = float(filter['stepSize'])
-                            min_qty = float(filter['minQty'])
-                            max_qty = float(filter['maxQty'])
-                            # 수량 제한에 맞게 반올림
-                            quantity = max(min(quantity, max_qty), min_qty)
-                            quantity = step_size * (int(quantity / step_size))
-                            return quantity
-        logging.error("LOT_SIZE 필터 정보를 가져오는 데 실패했습니다: %s", symbol)
-        return 0.0
-
-    def get_position_size(self, symbol: str) -> float:
-        """
-        현재 포지션 사이즈를 가져옵니다.
-        :param symbol: 심볼 (예: 'LDOUSDT')
-        :return: 포지션 수량
-        """
-        endpoint = '/fapi/v2/positionRisk'
-        params = {}
-        response = self._send_request('GET', endpoint, params)
-        if response:
-            for pos in response:
-                if pos['symbol'] == symbol:
-                    return float(pos['positionAmt'])
-        return 0.0
+        # z_score가 모든 조건에 해당하지 않을 경우
+        logging.info(f"[{timestamp}] |z_score| {z_score} 이 모든 조건에 해당하지 않음: 아무 행동도 취하지 않음")
